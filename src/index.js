@@ -34,6 +34,10 @@ const typeDefs = gql`
     updateTaskList(id: ID!, title: String!): TaskList!
     deleteTaskList(id: ID!): Boolean!
     addUserToTaskList(taskListId: ID!, userId: ID!): TaskList
+
+    createToDo(content: String!, taskListId: ID!): ToDo!
+    updateToDo(id: ID!, content: String, isCompleted: Boolean): ToDo!
+    deleteToDo(id: ID!): Boolean!
   }
 
   input SignUpInput {
@@ -127,6 +131,7 @@ const resolvers = {
       };
     },
 
+    // ! TaskList Mutations
     createTaskList: async (_, { title }, { db, user }) => {
       if (!user) {
         throw new Error("Authentication Error. Please sign in.");
@@ -144,9 +149,10 @@ const resolvers = {
       if (!user) {
         throw new Error("Authentication Error. Please sign in.");
       }
-      const result = await db
+      await db
         .collection("TaskList")
         .updateOne({ _id: ObjectID(id) }, { $set: { title } });
+
       return await db.collection("TaskList").findOne({ _id: ObjectID(id) });
     },
 
@@ -184,17 +190,72 @@ const resolvers = {
       await db.collection("TaskList").removeOne({ _id: ObjectID(id) });
       return true;
     },
+
+    // ! ToDo Mutations
+    createToDo: async (_, { content, taskListId }, { db, user }) => {
+      if (!user) {
+        throw new Error("Authentication Error. Please sign in.");
+      }
+      const newToDo = {
+        content,
+        taskListId: ObjectID(taskListId),
+        isCompleted: false,
+      };
+
+      const result = await db.collection("ToDo").insert(newToDo);
+      return result.ops[0];
+    },
+
+    updateToDo: async (_, data, { db, user }) => {
+      if (!user) {
+        throw new Error("Authentication Error. Please sign in.");
+      }
+      await db
+        .collection("ToDo")
+        .updateOne({ _id: ObjectID(data.id) }, { $set: data });
+
+      return await db.collection("ToDo").findOne({ _id: ObjectID(data.id) });
+    },
+
+    deleteToDo: async (_, { id }, { db, user }) => {
+      if (!user) {
+        throw new Error("Authentication Error. Please sign in.");
+      }
+      await db.collection("ToDo").removeOne({ _id: ObjectID(id) });
+      return true;
+    },
   },
   User: {
     id: ({ _id, id }) => _id || id,
   },
   TaskList: {
     id: ({ _id, id }) => _id || id,
-    progress: () => 0,
+    progress: async ({ _id }, _, { db }) => {
+      const todos = await db
+        .collection("ToDo")
+        .find({ taskListId: ObjectID(_id) })
+        .toArray();
+      const completed = todos.filter((todo) => todo.isCompleted);
+
+      if (todos.length === 0) return 0;
+
+      return 100 * (completed.length / todos.length);
+    },
     users: async ({ userIds }, _, { db }) =>
       Promise.all(
         userIds.map((userId) => db.collection("Users").findOne({ _id: userId }))
       ),
+    todos: async ({ _id }, _, { db }) => {
+      return await db
+        .collection("ToDo")
+        .find({ taskListId: ObjectID(_id) })
+        .toArray();
+    },
+  },
+  ToDo: {
+    id: ({ _id, id }) => _id || id,
+    taskList: async ({ taskListId }, _, { db }) =>
+      await db.collection("TaskList").findOne({ _id: ObjectID(taskListId) }),
   },
 };
 
