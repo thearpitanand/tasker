@@ -282,8 +282,9 @@ const start = async () => {
     },
   });
 
+  const PORT = process.env.PORT || 3000;
   // The `listen` method launches a web server.
-  server.listen().then(({ url }) => {
+  server.listen(PORT).then(({ url }) => {
     console.log(`🚀  Server ready at ${url}`);
   });
 };
